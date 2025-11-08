@@ -1,12 +1,14 @@
 {
-  "name": "ella-demo",
+  "name": "ella-demo-api",
   "version": "0.1.0",
   "description": "tiny micro demo for ella app",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "prestart": "docker ps | grep chromadb || docker run -d -p 8888:8000 chromadb/chroma:latest",
+    "start": "wait-on http://localhost:8888/api/v1/heartbeat && node index.js",
+    "dev": "node --watch index.js",
+    "demo": "wait-on http://localhost:8888/api/v1/heartbeat && node ./src/demo.js"
   },
   "author": "bmordan",
   "license": "MIT",
@@ -14,11 +16,15 @@
     "better-sqlite3": "^11.6.0",
     "chromadb": "^1.9.4",
     "cross-fetch": "^4.0.0",
+    "express": "^5.1.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "uuid": "^11.0.3"
   },
   "overrides": {
     "whatwg-url": "^14.0.0"
+  },
+  "devDependencies": {
+    "wait-on": "^9.0.1"
   }
 }

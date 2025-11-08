@@ -1,0 +1,76 @@
+@startuml
+title RAG Flow: POST /ai/:userId
+
+!theme plain
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 10
+skinparam participantpadding 10
+skinparam boxpadding 20
+
+actor Client
+participant "Server (index.js)" as Server
+participant "AIApplication" as App
+database "SQLite (users.db)" as DB
+database "ChromaDB (Vector Store)" as VectorDB
+participant "Ollama (LLM)" as LLM
+
+Client -> Server: POST /ai/:userId \n(with query)
+activate Server #SkyBlue
+Server -> App: **generateResponse**(userId, query)
+activate App #Orange
+
+group **1. Retrieve (Get Context)**
+    App -> App: **getRelevantContext**(userId, query)
+    activate App #LightBlue
+    App -> DB: getUserStatement.get(userId)
+    activate DB
+    DB --> App: user (name, preferences)
+    deactivate DB
+
+    App -> VectorDB: **collection.query**(\n  queryTexts=[query],\n  where={userId}\n)
+    activate VectorDB
+    VectorDB --> App: results (relevant conversations)
+    deactivate VectorDB
+    deactivate App
+end
+
+group **2. Augment (Build Prompt)**
+    App -> App: **_preparePrompt**(context, query)
+    note right of App
+        Combines:
+        1. User preferences (from SQLite)
+        2. Relevant past conversations (from ChromaDB)
+        3. The new user query
+    end note
+end
+
+group **3. Generate (Call LLM)**
+    App -> LLM: POST /api/generate \n(with augmented RAG prompt)
+    activate LLM
+    LLM --> App: aiResponse (generated text)
+    deactivate LLM
+end
+
+group **4. Store (Update Context)**
+    App -> App: **storeConversation**(userId, "query|aiResponse")
+    activate App #LightGreen
+    App -> DB: **addUserConversation.run**(...)
+    activate DB
+    note left of DB: Store full text for history
+    DB --> App: (ack)
+    deactivate DB
+
+    App -> VectorDB: **collection.add**(\n  id, document, metadata\n)
+    activate VectorDB
+    note right of VectorDB: Store embedding for future retrieval
+    VectorDB --> App: (ack)
+    deactivate VectorDB
+    deactivate App
+end
+
+App --> Server: aiResponse
+deactivate App
+Server --> Client: 200 OK \n{ response: aiResponse }
+deactivate Server
+
+@enduml
